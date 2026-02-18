@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { TableCard } from './components/TableCard';
 import { SVGLines } from './components/SVGLines';
 import { Minimap } from './components/Minimap';
@@ -23,56 +23,10 @@ function App() {
   const [isInputPanelOpen, setIsInputPanelOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  useEffect(() => {
-    const airbnbSchema = `CREATE TABLE contacts (
-    id int4 PRIMARY KEY,
-    name text,
-    company text,
-    phone text,
-    email text,
-    service_type text,
-    user_id uuid REFERENCES auth.users(id)
-);
-
-CREATE TABLE properties (
-    id int4 PRIMARY KEY,
-    name text,
-    address text,
-    status text,
-    user_id uuid REFERENCES auth.users(id)
-);
-
-CREATE TABLE tasks (
-    id int4 PRIMARY KEY,
-    property_id int4 REFERENCES properties(id),
-    contact_id int4 REFERENCES contacts(id),
-    description text,
-    start_date text,
-    end_date text,
-    cost float4,
-    payment_status text,
-    completion_status text,
-    recurring text,
-    recurrence_interval text,
-    notes text,
-    user_id uuid REFERENCES auth.users(id)
-);`;
-    handleParseSQL(airbnbSchema);
-    
-    // Set initial positions to match the screenshot layout
-    setTimeout(() => {
-      setPositions({
-        contacts: { x: 600, y: 100 },
-        properties: { x: 900, y: 350 },
-        tasks: { x: 350, y: 350 }
-      });
-    }, 100);
-  }, []);
   
   const handleParseSQL = useCallback((sql: string) => {
     const result = parseSQL(sql);
@@ -182,37 +136,44 @@ CREATE TABLE tasks (
   }, [zoom, pan]);
   
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Capture start offset relative to current pan position
+    const startX = e.clientX - pan.x;
+    const startY = e.clientY - pan.y;
+
     setIsPanning(true);
-    setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+
+    const onMouseMove = (ev: MouseEvent) => {
+      setPan({ x: ev.clientX - startX, y: ev.clientY - startY });
+    };
+
+    const onMouseUp = () => {
+      setIsPanning(false);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
   }, [pan]);
-  
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isPanning) {
-      setPan({
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y
-      });
-    }
-  }, [isPanning, panStart]);
-  
-  const handleMouseUp = useCallback(() => {
-    setIsPanning(false);
-  }, []);
   
   const selectedTable = selectedTableId 
     ? schema.tables.find(t => t.id === selectedTableId) || null
     : null;
   
   return (
-    <div className="h-screen w-screen bg-dark-bg overflow-hidden relative">
+    <div
+      className="h-screen w-screen overflow-hidden relative"
+      style={{
+        backgroundColor: '#000000',
+        backgroundImage: `radial-gradient(circle, #ffffff 1px, transparent 1px)`,
+        backgroundSize: '24px 24px',
+      }}
+    >
       <div
         ref={containerRef}
         className="absolute inset-0 overflow-hidden cursor-grab active:cursor-grabbing"
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
       >
         <div
           ref={canvasRef}
@@ -225,14 +186,6 @@ CREATE TABLE tasks (
           }}
           data-canvas="true"
         >
-          <div
-            className="absolute inset-0 opacity-30"
-            style={{
-              backgroundImage: `radial-gradient(circle, #ffffff 1px, transparent 1px)`,
-              backgroundSize: '24px 24px'
-            }}
-          />
-          
           <SVGLines
             relationships={schema.relationships}
             tables={schema.tables}
@@ -256,6 +209,46 @@ CREATE TABLE tasks (
         </div>
       </div>
       
+      {schema.tables.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="flex flex-col items-center gap-6 text-center px-10 py-8 rounded-2xl border border-dark-border bg-dark-card" style={{ backgroundColor: '#141414e6' }}>
+
+            {/* Icon with soft glow */}
+            <div className="relative flex items-center justify-center">
+              <div className="absolute w-20 h-20 rounded-full blur-2xl" style={{ backgroundColor: '#3b82f630' }} />
+              <div className="relative w-14 h-14 rounded-2xl border border-dark-border bg-dark-card flex items-center justify-center">
+                <svg className="w-6 h-6 text-accent-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={1.5} />
+                  <line x1="3" y1="9" x2="21" y2="9" strokeWidth={1.5} />
+                  <line x1="9" y1="3" x2="9" y2="21" strokeWidth={1.5} />
+                </svg>
+              </div>
+            </div>
+
+            {/* Copy */}
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-dark-text text-sm font-semibold tracking-tight">No schema loaded</p>
+              <p className="text-dark-muted text-xs leading-relaxed max-w-[200px]">
+                Paste a SQL <span className="text-dark-text font-mono">CREATE TABLE</span> statement or a JSON schema to visualize your database
+              </p>
+            </div>
+
+            {/* CTA */}
+            <button
+              className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium text-white transition-opacity hover:opacity-80 active:opacity-60"
+              style={{ backgroundColor: '#3b82f6' }}
+              onClick={() => setIsInputPanelOpen(true)}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Load schema
+            </button>
+
+          </div>
+        </div>
+      )}
+
       <InputPanel
         isOpen={isInputPanelOpen}
         onToggle={() => setIsInputPanelOpen(!isInputPanelOpen)}
