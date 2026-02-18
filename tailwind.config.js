@@ -8,7 +8,7 @@ export default {
     extend: {
       colors: {
         dark: {
-          bg: '#000000',
+          bg: '#0e0e0e',
           card: '#141414',
           border: '#2a2a2a',
           text: '#e5e5e5',

@@ -13,6 +13,9 @@ const CANVAS_WIDTH = 3000;
 const CANVAS_HEIGHT = 2000;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 2.0;
+const TABLE_WIDTH = 220;
+const HEADER_HEIGHT = 36;
+const COLUMN_HEIGHT = 24;
 
 function App() {
   const [schema, setSchema] = useState<Schema>({ tables: [], relationships: [] });
@@ -28,54 +31,73 @@ function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   
   
+  const buildPositions = (tables: Table[]) => {
+    const newPositions: Record<string, TablePosition> = {};
+    const cols = Math.ceil(Math.sqrt(tables.length));
+    tables.forEach((table, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      newPositions[table.id] = {
+        x: col * 320,
+        y: row * 250
+      };
+    });
+    return newPositions;
+  };
+
+  const centerOnTables = (tables: Table[], newPositions: Record<string, TablePosition>) => {
+    const vpWidth = containerRef.current?.clientWidth ?? window.innerWidth;
+    const vpHeight = containerRef.current?.clientHeight ?? window.innerHeight;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    tables.forEach(table => {
+      const pos = newPositions[table.id];
+      if (!pos) return;
+      const tableHeight = HEADER_HEIGHT + table.columns.length * COLUMN_HEIGHT;
+      minX = Math.min(minX, pos.x);
+      minY = Math.min(minY, pos.y);
+      maxX = Math.max(maxX, pos.x + TABLE_WIDTH);
+      maxY = Math.max(maxY, pos.y + tableHeight);
+    });
+
+    const contentCenterX = (minX + maxX) / 2;
+    const contentCenterY = (minY + maxY) / 2;
+
+    setZoom(1);
+    setPan({
+      x: vpWidth / 2 - contentCenterX,
+      y: vpHeight / 2 - contentCenterY,
+    });
+  };
+
   const handleParseSQL = useCallback((sql: string) => {
     const result = parseSQL(sql);
     if (result.error) {
       setError(result.error);
       return;
     }
-    
+
+    const newPositions = buildPositions(result.tables);
     setSchema({ tables: result.tables, relationships: result.relationships });
-    
-    const newPositions: Record<string, TablePosition> = {};
-    const cols = Math.ceil(Math.sqrt(result.tables.length));
-    result.tables.forEach((table, index) => {
-      const row = Math.floor(index / cols);
-      const col = index % cols;
-      newPositions[table.id] = {
-        x: 100 + col * 320,
-        y: 100 + row * 250
-      };
-    });
-    
     setPositions(newPositions);
     setError(null);
     setSelectedTableId(null);
+    centerOnTables(result.tables, newPositions);
   }, []);
-  
+
   const handleParseJSON = useCallback((json: string) => {
     const result = parseJSONSchema(json);
     if (result.error) {
       setError(result.error);
       return;
     }
-    
+
+    const newPositions = buildPositions(result.schema.tables);
     setSchema(result.schema);
-    
-    const newPositions: Record<string, TablePosition> = {};
-    const cols = Math.ceil(Math.sqrt(result.schema.tables.length));
-    result.schema.tables.forEach((table, index) => {
-      const row = Math.floor(index / cols);
-      const col = index % cols;
-      newPositions[table.id] = {
-        x: 100 + col * 320,
-        y: 100 + row * 250
-      };
-    });
-    
     setPositions(newPositions);
     setError(null);
     setSelectedTableId(null);
+    centerOnTables(result.schema.tables, newPositions);
   }, []);
   
   const handlePositionChange = useCallback((id: string, pos: TablePosition) => {
@@ -122,8 +144,8 @@ function App() {
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + delta));
     
-    if (newZoom !== zoom && canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
+    if (newZoom !== zoom && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       
@@ -165,8 +187,9 @@ function App() {
       className="h-screen w-screen overflow-hidden relative"
       style={{
         backgroundColor: '#000000',
-        backgroundImage: `radial-gradient(circle, #ffffff 1px, transparent 1px)`,
+        backgroundImage: `radial-gradient(circle, #3a3a3a 1px, transparent 1px)`,
         backgroundSize: '24px 24px',
+        backgroundPosition: `${pan.x % 24}px ${pan.y % 24}px`,
       }}
     >
       <div
@@ -211,7 +234,7 @@ function App() {
       
       {schema.tables.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <div className="flex flex-col items-center gap-6 text-center px-10 py-8 rounded-2xl border border-dark-border bg-dark-card" style={{ backgroundColor: '#141414e6' }}>
+          <div className="flex flex-col items-center gap-6 text-center px-10 py-8 rounded-2xl border border-dark-border backdrop-blur-md" style={{ backgroundColor: '#141414e6' }}>
 
             {/* Icon with soft glow */}
             <div className="relative flex items-center justify-center">
@@ -265,20 +288,22 @@ function App() {
         onClose={() => setSelectedTableId(null)}
       />
       
-      <Minimap
-        tables={schema.tables}
-        positions={positions}
-        zoom={zoom}
-        pan={pan}
-        canvasBounds={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
-        viewportSize={{ 
-          width: containerRef.current?.clientWidth || window.innerWidth,
-          height: containerRef.current?.clientHeight || window.innerHeight
-        }}
-        onPanChange={setPan}
-      />
+      {schema.tables.length > 0 && (
+        <Minimap
+          tables={schema.tables}
+          positions={positions}
+          zoom={zoom}
+          pan={pan}
+          canvasBounds={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
+          viewportSize={{
+            width: containerRef.current?.clientWidth || window.innerWidth,
+            height: containerRef.current?.clientHeight || window.innerHeight
+          }}
+          onPanChange={setPan}
+        />
+      )}
       
-      <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
+      {schema.tables.length > 0 && <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
         <button
           onClick={() => setZoom(Math.min(MAX_ZOOM, zoom + 0.25))}
           className="w-10 h-10 bg-dark-card border border-dark-border text-dark-text rounded-lg shadow-lg hover:bg-dark-border transition-colors flex items-center justify-center"
@@ -301,7 +326,7 @@ function App() {
         >
           {Math.round(zoom * 100)}%
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

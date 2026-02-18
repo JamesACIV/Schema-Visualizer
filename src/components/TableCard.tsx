@@ -69,7 +69,6 @@ export const TableCard: React.FC<TableCardProps> = ({
     <div
       className={`
         absolute bg-dark-card border rounded-lg overflow-hidden
-        ${isSelected ? 'border-dark-border' : 'border-dark-border'}
         ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
       `}
       style={{
@@ -77,7 +76,10 @@ export const TableCard: React.FC<TableCardProps> = ({
         top: position.y,
         width: cardWidth,
         zIndex: isSelected ? 10 : 1,
-        boxShadow: isSelected ? '0 0 0 1px #3b82f6' : 'none',
+        borderColor: isSelected ? '#3b82f6' : '#3f3f46',
+        boxShadow: isSelected
+          ? '0 0 0 2px #3b82f6, 0 0 20px 4px #3b82f650'
+          : '0 0 0 1px #3f3f4640',
         userSelect: 'none'
       }}
       onMouseDown={handleMouseDown}
